@@ -1,12 +1,13 @@
+// Fogaozinho Educacional - PIBIC/PIBIT
+// Firmware v1.3 - receita + gameplay de fogo
+
 #include <Arduino.h>
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <Preferences.h>
+#include <cstring>
 
-// FOGAOZINHO EDUCACIONAL - PIBIC
-
-// OLED
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -14,7 +15,6 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// PINAGEM 
 #define LED_R 18
 #define LED_B 19
 #define LED_G 23
@@ -27,7 +27,6 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define BUZZER 14    // modulo low-level trigger
 
-// TIPOS 
 enum TipoGato : uint8_t {
   GATO_DORMINDO,
   GATO_ATENTO,
@@ -107,8 +106,13 @@ enum EstadoBolo : uint8_t {
   BOL_JUNTAR,
   BOL_MISTURAR,
   BOL_FORMA,
+  BOL_ZERO,
+  BOL_PREAQUECER,
+  BOL_REDUZIR,
+  BOL_COLOCAR,
   BOL_ASSAR,
-  BOL_FINAL
+  BOL_VERIFICAR,
+  BOL_DESLIGAR
 };
 
 enum EstadoOmelete : uint8_t {
@@ -119,7 +123,9 @@ enum EstadoOmelete : uint8_t {
   OME_ZERO_FOGO,
   OME_BAIXO,
   OME_COLOCAR,
+  OME_SUBIR_MEDIO,
   OME_COZINHAR,
+  OME_REDUZIR,
   OME_DOBRAR,
   OME_DESLIGAR
 };
@@ -131,6 +137,7 @@ enum EstadoMingau : uint8_t {
   MIN_BAIXO,
   MIN_MEXER,
   MIN_ENGROSSAR,
+  MIN_PONTO,
   MIN_DESLIGAR,
   MIN_ESFRIAR
 };
@@ -189,8 +196,6 @@ void jogoBolo();
 void jogoOmelete();
 void jogoMingau();
 
-// SPRITES - SSD1306 VERTICAL PAGES / LSB = TOPO
-// GATO DORMINDO - 37 x 29
 const int gatoDormindo_width = 37;
 const int gatoDormindo_height = 29;
 const unsigned char gatoDormindo[] PROGMEM = {
@@ -206,7 +211,6 @@ const unsigned char gatoDormindo[] PROGMEM = {
 0x00,0x00,0x00,0x00
 };
 
-// GATO ATENTO - 30 x 37
 const int gatoAtento_width = 30;
 const int gatoAtento_height = 37;
 const unsigned char gatoAtento[] PROGMEM = {
@@ -222,7 +226,6 @@ const unsigned char gatoAtento[] PROGMEM = {
 0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-// GATO ASSUSTADO - 39 x 31
 const int gatoAssustado_width = 39;
 const int gatoAssustado_height = 31;
 const unsigned char gatoAssustado[] PROGMEM = {
@@ -238,7 +241,6 @@ const unsigned char gatoAssustado[] PROGMEM = {
 0x02,0x06,0x07,0x06,0x01,0x01,0x00,0x00,0x00,0x00,0x00,0x00
 };
 
-// GATO MEGA ASSUSTADO - 34 x 28
 const int gatoMega_width = 34;
 const int gatoMega_height = 28;
 const unsigned char gatoMega[] PROGMEM = {
@@ -253,7 +255,8 @@ const unsigned char gatoMega[] PROGMEM = {
 0x00,0x00,0x00,0x00
 };
 
-// RECEITAS
+const int TOTAL_RECEITAS = 6;
+
 const char* NOMES_RECEITAS[TOTAL_RECEITAS] = {
   "PANQUECA",
   "BRIGADEIRO",
@@ -280,7 +283,6 @@ bool receitaConcluida[TOTAL_RECEITAS] = {
   false, false, false, false, false, false
 };
 
-// ESTADO GERAL
 Preferences prefs;
 
 EstadoSistema estadoAtual = MENU_PRINCIPAL;
@@ -291,7 +293,6 @@ int receitaEmJogo = 0;
 
 String codigoDigitado = "";
 
-// TEMPORIZADORES GERAIS
 unsigned long inicioFaixa = 0;
 unsigned long inicioDesligado = 0;
 unsigned long ultimoAviso = 0;
@@ -300,17 +301,12 @@ unsigned long inicioAcerto = 0;
 
 bool alarmeLigado = false;
 
-// CHAMA
 unsigned long ultimaVariacaoChama = 0;
 int brilhoChama = 100;
 
-
-// RECAP DA RECEITA + ESTADOS DOS MINIGAMES
 FaseReceita faseReceita = RECEITA_RECAP;
 int passoRecap = 0;
 
-// Cada codigo recupera estes dados do puzzle fisico.
-// A OLED apenas REPASSA o que a crianca ja descobriu no livro.
 const uint8_t RECAP_TOTAL[TOTAL_RECEITAS] = { 5, 6, 6, 4, 3, 5 };
 
 const char* RECAP_L1[TOTAL_RECEITAS][6] = {
@@ -338,16 +334,13 @@ EstadoBolo estadoBolo = BOL_PERGUNTAS;
 EstadoOmelete estadoOmelete = OME_PREPARAR;
 EstadoMingau estadoMingau = MIN_DEBUG;
 
-// Brigadeiro
 int mexidasBrigadeiro = 0;
 bool brigadeiroPodeMexer = false;
 
-// Sopa
 int cenarioSopa = 0;
 const bool sopaFervendo[4] = { false, true, false, true };
 bool avisoSopaTocado = false;
 
-// Bolo 
 int perguntaBolo = 0;
 const char* boloLinha1[4] = {
   "A=3  B=4",
@@ -363,7 +356,6 @@ const char* boloLinha2[4] = {
 };
 const int boloResposta[4] = { 7, 4, 5, 3 };
 
-// Omelete
 int etapaCor = 0;
 bool canalR = false;
 bool canalG = false;
@@ -374,7 +366,6 @@ const char* alvoCorNome[3] = {
   "CIANO"
 };
 
-// Mingau 
 int passoDebug = 0;
 const int TOTAL_DEBUG = 6;
 const char* debugComando[TOTAL_DEBUG] = {
@@ -396,7 +387,6 @@ const bool debugEhBug[TOTAL_DEBUG] = {
 int mexidasMingau = 0;
 bool mingauPodeMexer = false;
 
-// BUZZER
 void buzzerOff() {
   digitalWrite(BUZZER, HIGH);
 }
@@ -433,7 +423,6 @@ void somVitoria() {
   bip(130);
 }
 
-// RGB
 void corRGB(int r, int g, int b) {
   analogWrite(LED_R, constrain(r, 0, 255));
   analogWrite(LED_G, constrain(g, 0, 255));
@@ -444,7 +433,6 @@ void apagarFogo() {
   corRGB(0, 0, 0);
 }
 
-// FOGO 
 DadosFogo calcularFogo() {
   DadosFogo fogo;
 
@@ -455,7 +443,6 @@ DadosFogo calcularFogo() {
   fogo.b = 0;
   fogo.zona = FOGO_OFF;
 
-  // deadband de zero
   if (fogo.pot < 250) {
     return fogo;
   }
@@ -463,35 +450,30 @@ DadosFogo calcularFogo() {
   fogo.potencia = map(fogo.pot, 250, 4095, 0, 255);
   fogo.potencia = constrain(fogo.potencia, 0, 255);
 
-  // BAIXO - amarelo
   if (fogo.potencia < 85) {
     fogo.r = map(fogo.potencia, 0, 84, 90, 180);
     fogo.g = map(fogo.potencia, 0, 84, 7, 18);
     fogo.b = 0;
     fogo.zona = FOGO_BAIXO;
   }
-  // MEDIO - amarelo/laranja
   else if (fogo.potencia < 170) {
     fogo.r = map(fogo.potencia, 85, 169, 180, 255);
     fogo.g = map(fogo.potencia, 85, 169, 18, 25);
     fogo.b = 0;
     fogo.zona = FOGO_MEDIO;
   }
-  // ALTO - laranja/vermelho
   else if (fogo.potencia < 220) {
     fogo.r = 255;
     fogo.g = map(fogo.potencia, 170, 219, 30, 12);
     fogo.b = 0;
     fogo.zona = FOGO_ALTO;
   }
-  // MUITO ALTO
   else if (fogo.potencia < 245) {
     fogo.r = 255;
     fogo.g = map(fogo.potencia, 220, 244, 12, 0);
     fogo.b = 0;
     fogo.zona = FOGO_MUITO_ALTO;
   }
-  // PERIGO - vermelho + minimo azul
   else {
     fogo.r = 255;
     fogo.g = 0;
@@ -512,7 +494,6 @@ void aplicarFogoAnimado(DadosFogo fogo) {
     ultimaVariacaoChama = millis();
     brilhoChama = random(84, 101);
 
-    // piscada ocasional da chama
     if (random(0, 100) < 10) {
       brilhoChama = random(72, 84);
     }
@@ -526,7 +507,6 @@ void aplicarFogoAnimado(DadosFogo fogo) {
 }
 
 void atualizarAlarme(ZonaFogo zona) {
-  // perigo = alarme rapido continuo
   if (zona == FOGO_PERIGO) {
     if (millis() - ultimoAlarme >= 120) {
       ultimoAlarme = millis();
@@ -540,7 +520,6 @@ void atualizarAlarme(ZonaFogo zona) {
   buzzerOff();
   alarmeLigado = false;
 
-  // alto / muito alto = aviso ocasional
   if (zona == FOGO_ALTO || zona == FOGO_MUITO_ALTO) {
     if (millis() - ultimoAviso >= 900) {
       ultimoAviso = millis();
@@ -549,7 +528,6 @@ void atualizarAlarme(ZonaFogo zona) {
   }
 }
 
-// BOTOES
 bool clicou(int pino) {
   if (digitalRead(pino) == LOW) {
     delay(25);
@@ -563,7 +541,6 @@ bool clicou(int pino) {
   return false;
 }
 
-// SPRITES
 void desenharBitmapVertical(int x0, int y0, const unsigned char* bitmap, int largura, int altura) {
   int paginas = (altura + 7) / 8;
 
@@ -616,9 +593,6 @@ void desenharGato(TipoGato tipo, bool gota) {
   }
 }
 
-// UI - GRADE FIXA
-// Texto: x 3..80
-// Gato:  x 84..127
 void printLimitado(const char* texto, int maxChars) {
   if (texto == nullptr) return;
   for (int i = 0; texto[i] != '\0' && i < maxChars; i++) {
@@ -666,7 +640,6 @@ void telaComBarra(const char* titulo, const char* l1, const char* l2, const char
 
   desenharGato(gato, gota);
 
-  // barra fica somente no lado esquerdo
   display.drawRect(3, 54, 76, 8, SSD1306_WHITE);
 
   if (inicio > 0 && total > 0) {
@@ -692,7 +665,6 @@ void telaAbertura() {
   delay(1400);
 }
 
-// FEEDBACK DE FOGO
 bool fogoNaFaixa(DadosFogo fogo, ZonaFogo alvo) {
   if (alvo == FOGO_MEDIO) {
     return fogo.potencia >= 105 && fogo.potencia <= 155;
@@ -763,7 +735,6 @@ bool manterFaixa(DadosFogo fogo, ZonaFogo alvo, unsigned long tempoNecessario) {
   return false;
 }
 
-// MEMORIA NVS
 void carregarProgresso() {
   for (int i = 0; i < TOTAL_RECEITAS; i++) {
     char chaveU[5];
@@ -774,7 +745,6 @@ void carregarProgresso() {
     receitaDesbloqueada[i] = prefs.getBool(chaveU, false);
     receitaConcluida[i] = prefs.getBool(chaveD, false);
 
-    // concluida implica desbloqueada
     if (receitaConcluida[i]) receitaDesbloqueada[i] = true;
   }
 }
@@ -814,7 +784,6 @@ bool todasReceitasConcluidas() {
   return true;
 }
 
-// MENUS
 void atualizarMenuPrincipal() {
   apagarFogo();
   buzzerOff();
@@ -866,7 +835,6 @@ void atualizarMenuReceitas() {
   display.clearDisplay();
   cabecalho("RECEITAS");
 
-  // receitaSelecionada 6 = voltar
   if (receitaSelecionada == TOTAL_RECEITAS) {
     display.setCursor(3, 24);
     display.print("> VOLTAR");
@@ -922,7 +890,6 @@ void atualizarMenuReceitas() {
   }
 }
 
-// ENTRADA DE CODIGO - 4 A 6 DIGITOS
 void atualizarTelaCodigo() {
   apagarFogo();
   buzzerOff();
@@ -953,7 +920,6 @@ void atualizarTelaCodigo() {
   desenharGato(GATO_ATENTO, false);
   display.display();
 
-  // esquerda = apagar / voltar
   if (clicou(BOTAO_1)) {
     if (codigoDigitado.length() > 0) {
       codigoDigitado.remove(codigoDigitado.length() - 1);
@@ -964,7 +930,6 @@ void atualizarTelaCodigo() {
     }
   }
 
-  // OK = adicionar numero
   if (clicou(BOTAO_2)) {
     if ((int)codigoDigitado.length() < tamanhoCodigo) {
       codigoDigitado += char('0' + digito);
@@ -972,7 +937,6 @@ void atualizarTelaCodigo() {
     }
   }
 
-  // direita = confirmar
   if (clicou(BOTAO_3)) {
     if ((int)codigoDigitado.length() != tamanhoCodigo) {
       bipTriplo();
@@ -994,7 +958,6 @@ void atualizarTelaCodigo() {
   }
 }
 
-// INICIO / RECAP / FIM DAS RECEITAS
 void iniciarReceita(int receita) {
   receitaEmJogo = receita;
   faseReceita = RECEITA_RECAP;
@@ -1007,7 +970,6 @@ void iniciarReceita(int receita) {
   apagarFogo();
   buzzerOff();
 
-  // reset dos estados especificos
   estadoPanqueca = PAN_ZERO;
   estadoBrigadeiro = BRI_ZERO;
   estadoSopa = SOP_ZERO;
@@ -1051,7 +1013,6 @@ void atualizarRecapReceita() {
 
   int total = RECAP_TOTAL[receitaEmJogo];
 
-  // paginas da receita recuperada
   if (passoRecap < total) {
     display.clearDisplay();
     cabecalho(NOMES_RECEITAS[receitaEmJogo]);
@@ -1105,7 +1066,6 @@ void atualizarRecapReceita() {
     return;
   }
 
-  // pagina final do recap
   telaBase(
     NOMES_RECEITAS[receitaEmJogo],
     "RECEITA",
@@ -1140,37 +1100,15 @@ void concluirReceita(int receita) {
   estadoAtual = MENU_RECEITAS;
 }
 
-// RECEITA 1 - PANQUECA
-// PUZZLE: SEQUENCIA / ALGORITMO -> 92846
 void jogoPanqueca() {
-  DadosFogo fogo = calcularFogo();
-  aplicarFogoAnimado(fogo);
-  atualizarAlarme(fogo.zona);
-
   const char* fb = "";
   TipoGato gato = GATO_ATENTO;
   bool gota = false;
 
-  if (estadoPanqueca == PAN_ZERO) {
-    if (fogo.zona == FOGO_OFF) {
-      if (inicioDesligado == 0) inicioDesligado = millis();
-      telaBase("PANQUECA 1/10", "VAMOS FAZER!", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
-
-      if (millis() - inicioDesligado >= 600) {
-        inicioDesligado = 0;
-        estadoPanqueca = PAN_PREPARAR_MASSA;
-        bipDuplo();
-      }
-    }
-    else {
-      inicioDesligado = 0;
-      telaBase("PANQUECA 1/10", "VAMOS FAZER!", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
-    }
-  }
-
-  else if (estadoPanqueca == PAN_PREPARAR_MASSA) {
+  if (estadoPanqueca == PAN_PREPARAR_MASSA) {
     apagarFogo();
-    telaBase("PANQUECA 2/10", "PREPARE MASSA", "MISTURE BEM", "OK = PRONTO", GATO_ATENTO, false);
+    buzzerOff();
+    telaBase("PANQUECA 2/10", "OVO + LEITE", "ADD FARINHA", "OK = MISTUREI", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       mostrarMensagem("PANQUECA", "MASSA PRONTA", "VAMOS AO FOGO", 650, GATO_ATENTO);
@@ -1179,145 +1117,167 @@ void jogoPanqueca() {
     }
   }
 
-  else if (estadoPanqueca == PAN_BAIXO_INICIAL) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1200);
-    telaComBarra("PANQUECA 3/10", "LIGUE FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1200);
+  else {
+    DadosFogo fogo = calcularFogo();
+    aplicarFogoAnimado(fogo);
+    atualizarAlarme(fogo.zona);
 
-    if (pronto) {
-      estadoPanqueca = PAN_AQUECER;
-      bipDuplo();
-    }
-  }
+    if (estadoPanqueca == PAN_ZERO) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("PANQUECA 1/10", "VAMOS FAZER!", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
 
-  else if (estadoPanqueca == PAN_AQUECER) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_MEDIO, 3000);
-    telaComBarra("PANQUECA 4/10", "AQUECA", "FRIGIDEIRA", fb, gato, gota, inicioFaixa, 3000);
-
-    if (pronto) {
-      mostrarMensagem("PANQUECA", "FRIGIDEIRA", "QUENTINHA!", 650, GATO_ATENTO);
-      estadoPanqueca = PAN_MASSA;
-      bipDuplo();
-    }
-  }
-
-  else if (estadoPanqueca == PAN_MASSA) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-
-    if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
-      telaBase("PANQUECA 5/10", "COLOQUE MASSA", "NA FRIGIDEIRA", "OK = COLOQ.", GATO_ATENTO, false);
-    }
-    else {
-      telaBase("PANQUECA 5/10", "COLOQUE MASSA", "ALVO: MEDIO", fb, gato, gota);
-    }
-
-    if (clicou(BOTAO_2)) {
-      if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
-        mostrarMensagem("PANQUECA", "MASSA NA", "FRIGIDEIRA!", 500, GATO_ATENTO);
-        estadoPanqueca = PAN_COZINHAR_1;
-        inicioFaixa = 0;
-        bipDuplo();
+        if (millis() - inicioDesligado >= 600) {
+          inicioDesligado = 0;
+          estadoPanqueca = PAN_PREPARAR_MASSA;
+          bipDuplo();
+        }
       }
       else {
-        bipTriplo();
-      }
-    }
-  }
-
-  else if (estadoPanqueca == PAN_COZINHAR_1) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_MEDIO, 4000);
-    telaComBarra("PANQUECA 6/10", "ESPERE BOLHAS", "FOGO MEDIO", fb, gato, gota, inicioFaixa, 4000);
-
-    if (pronto) {
-      mostrarMensagem("PANQUECA", "APARECERAM", "BOLHINHAS!", 600, GATO_ATENTO);
-      estadoPanqueca = PAN_VIRAR;
-      bipDuplo();
-    }
-  }
-
-  else if (estadoPanqueca == PAN_VIRAR) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-
-    if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
-      telaBase("PANQUECA 7/10", "HORA DE VIRAR", "A PANQUECA", "OK = VIREI", GATO_ATENTO, false);
-    }
-    else {
-      telaBase("PANQUECA 7/10", "HORA DE VIRAR", "ALVO: MEDIO", fb, gato, gota);
-    }
-
-    if (clicou(BOTAO_2)) {
-      if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
-        estadoPanqueca = PAN_COZINHAR_2;
-        inicioFaixa = 0;
-        bipDuplo();
-      }
-      else {
-        bipTriplo();
-      }
-    }
-  }
-
-  else if (estadoPanqueca == PAN_COZINHAR_2) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_MEDIO, 2200);
-    telaComBarra("PANQUECA 8/10", "DOURE O LADO", "FOGO MEDIO", fb, gato, gota, inicioFaixa, 2200);
-
-    if (pronto) {
-      estadoPanqueca = PAN_REDUZIR;
-      bipDuplo();
-    }
-  }
-
-  else if (estadoPanqueca == PAN_REDUZIR) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_BAIXO, 2500);
-    telaComBarra("PANQUECA 9/10", "DIMINUA FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 2500);
-
-    if (pronto) {
-      estadoPanqueca = PAN_RETIRAR;
-      bipDuplo();
-    }
-  }
-
-  else if (estadoPanqueca == PAN_RETIRAR) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-
-    if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-      telaBase("PANQUECA 10/10", "RETIRE PANQ.", "DO FOGO", "OK = RETIREI", GATO_ATENTO, false);
-    }
-    else {
-      telaBase("PANQUECA 10/10", "RETIRE PANQ.", "FOGO BAIXO", fb, gato, gota);
-    }
-
-    if (clicou(BOTAO_2)) {
-      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-        estadoPanqueca = PAN_DESLIGAR;
         inicioDesligado = 0;
+        telaBase("PANQUECA 1/10", "VAMOS FAZER!", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
+      }
+    }
+
+    else if (estadoPanqueca == PAN_BAIXO_INICIAL) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1200);
+      telaComBarra("PANQUECA 3/10", "LIGUE FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1200);
+
+      if (pronto) {
+        estadoPanqueca = PAN_AQUECER;
         bipDuplo();
       }
+    }
+
+    else if (estadoPanqueca == PAN_AQUECER) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 3000);
+      telaComBarra("PANQUECA 4/10", "AQUECA FRIG.", "ALVO: MEDIO", fb, gato, gota, inicioFaixa, 3000);
+
+      if (pronto) {
+        mostrarMensagem("PANQUECA", "FRIGIDEIRA", "QUENTINHA!", 650, GATO_ATENTO);
+        estadoPanqueca = PAN_MASSA;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoPanqueca == PAN_MASSA) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
+        telaBase("PANQUECA 5/10", "COLOQUE MASSA", "NA FRIGIDEIRA", "OK = COLOQ.", GATO_ATENTO, false);
+      }
       else {
-        bipTriplo();
+        telaBase("PANQUECA 5/10", "COLOQUE MASSA", "ALVO: MEDIO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
+          estadoPanqueca = PAN_COZINHAR_1;
+          inicioFaixa = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
       }
     }
-  }
 
-  else if (estadoPanqueca == PAN_DESLIGAR) {
-    if (fogo.zona == FOGO_OFF) {
-      if (inicioDesligado == 0) inicioDesligado = millis();
-      telaBase("PANQUECA", "RECEITA FEITA", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+    else if (estadoPanqueca == PAN_COZINHAR_1) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 4000);
+      telaComBarra("PANQUECA 6/10", "ESPERE BOLHAS", "FOGO MEDIO", fb, gato, gota, inicioFaixa, 4000);
 
-      if (millis() - inicioDesligado >= 700) {
-        concluirReceita(0);
-        return;
+      if (pronto) {
+        mostrarMensagem("PANQUECA", "TEM BOLHINHAS", "HORA DE VIRAR", 600, GATO_ATENTO);
+        estadoPanqueca = PAN_VIRAR;
+        bipDuplo();
       }
     }
-    else {
-      inicioDesligado = 0;
-      TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
-                   (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
-      telaBase("PANQUECA", "TERMINE AQUI", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
+
+    else if (estadoPanqueca == PAN_VIRAR) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
+        telaBase("PANQUECA 7/10", "VIRE A MASSA", "COM CUIDADO", "OK = VIREI", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("PANQUECA 7/10", "VIRE A MASSA", "ALVO: MEDIO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
+          estadoPanqueca = PAN_COZINHAR_2;
+          inicioFaixa = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
+      }
+    }
+
+    else if (estadoPanqueca == PAN_COZINHAR_2) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 2200);
+      telaComBarra("PANQUECA 8/10", "DOURE O LADO", "FOGO MEDIO", fb, gato, gota, inicioFaixa, 2200);
+
+      if (pronto) {
+        estadoPanqueca = PAN_REDUZIR;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoPanqueca == PAN_REDUZIR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 2500);
+      telaComBarra("PANQUECA 9/10", "QUASE PRONTA", "ABAIXE FOGO", fb, gato, gota, inicioFaixa, 2500);
+
+      if (pronto) {
+        estadoPanqueca = PAN_RETIRAR;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoPanqueca == PAN_RETIRAR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        telaBase("PANQUECA 10/10", "RETIRE PANQ.", "DA FRIGIDEIRA", "OK = RETIREI", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("PANQUECA 10/10", "RETIRE PANQ.", "FOGO BAIXO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+          estadoPanqueca = PAN_DESLIGAR;
+          inicioDesligado = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
+      }
+    }
+
+    else if (estadoPanqueca == PAN_DESLIGAR) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("PANQUECA", "PRONTINHA!", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+
+        if (millis() - inicioDesligado >= 700) {
+          concluirReceita(0);
+          return;
+        }
+      }
+      else {
+        inicioDesligado = 0;
+        TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
+                     (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
+        telaBase("PANQUECA", "PRONTINHA!", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
+      }
     }
   }
 
@@ -1328,37 +1288,15 @@ void jogoPanqueca() {
   }
 }
 
-// RECEITA 2 - BRIGADEIRO
-// PUZZLE: REPETICAO / LOOP -> 317056
 void jogoBrigadeiro() {
-  DadosFogo fogo = calcularFogo();
-  aplicarFogoAnimado(fogo);
-  atualizarAlarme(fogo.zona);
-
   const char* fb = "";
   TipoGato gato = GATO_ATENTO;
   bool gota = false;
 
-  if (estadoBrigadeiro == BRI_ZERO) {
-    if (fogo.zona == FOGO_OFF) {
-      if (inicioDesligado == 0) inicioDesligado = millis();
-      telaBase("BRIGADEIRO 1/8", "VAMOS FAZER!", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
-
-      if (millis() - inicioDesligado >= 600) {
-        inicioDesligado = 0;
-        estadoBrigadeiro = BRI_PANELA;
-        bipDuplo();
-      }
-    }
-    else {
-      inicioDesligado = 0;
-      telaBase("BRIGADEIRO 1/8", "VAMOS FAZER!", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
-    }
-  }
-
-  else if (estadoBrigadeiro == BRI_PANELA) {
+  if (estadoBrigadeiro == BRI_PANELA) {
     apagarFogo();
-    telaBase("BRIGADEIRO 2/8", "PEGUE PANELA", "COLOQUE AQUI", "OK = PEGUEI", GATO_ATENTO, false);
+    buzzerOff();
+    telaBase("BRIGADEIRO 2/8", "PEGUE PANELA", "DEIXE PRONTA", "OK = PEGUEI", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       estadoBrigadeiro = BRI_INGREDIENTES;
@@ -1368,7 +1306,8 @@ void jogoBrigadeiro() {
 
   else if (estadoBrigadeiro == BRI_INGREDIENTES) {
     apagarFogo();
-    telaBase("BRIGADEIRO 3/8", "LEITE COND.", "CHOC+MANTEIGA", "OK = COLOQUE", GATO_ATENTO, false);
+    buzzerOff();
+    telaBase("BRIGADEIRO 3/8", "LEITE COND.", "CACAU+MANT.", "OK = COLOQ.", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       mostrarMensagem("BRIGADEIRO", "INGREDIENTES", "NA PANELA!", 550, GATO_ATENTO);
@@ -1377,103 +1316,132 @@ void jogoBrigadeiro() {
     }
   }
 
-  else if (estadoBrigadeiro == BRI_BAIXO) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1800);
-    telaComBarra("BRIGADEIRO 4/8", "LIGUE FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1800);
+  else {
+    DadosFogo fogo = calcularFogo();
+    aplicarFogoAnimado(fogo);
+    atualizarAlarme(fogo.zona);
 
-    if (pronto) {
-      estadoBrigadeiro = BRI_MEXER;
-      mexidasBrigadeiro = 0;
-      brigadeiroPodeMexer = false;
-      inicioFaixa = 0;
-      bipDuplo();
-    }
-  }
+    if (estadoBrigadeiro == BRI_ZERO) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("BRIGADEIRO 1/8", "VAMOS FAZER!", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
 
-  else if (estadoBrigadeiro == BRI_MEXER) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-
-    if (!fogoNaFaixa(fogo, FOGO_BAIXO)) {
-      brigadeiroPodeMexer = false;
-      inicioFaixa = 0;
-    }
-
-    if (!brigadeiroPodeMexer) {
-      bool estabilizou = manterFaixa(fogo, FOGO_BAIXO, 1100);
-      char etapa[14];
-      snprintf(etapa, sizeof(etapa), "MEXER %d/3", mexidasBrigadeiro + 1);
-      telaComBarra("BRIGADEIRO 5/8", etapa, "FOGO BAIXO", fb, gato, gota, inicioFaixa, 1100);
-
-      if (estabilizou) {
-        brigadeiroPodeMexer = true;
-        bip(45);
+        if (millis() - inicioDesligado >= 600) {
+          inicioDesligado = 0;
+          estadoBrigadeiro = BRI_PANELA;
+          bipDuplo();
+        }
+      }
+      else {
+        inicioDesligado = 0;
+        telaBase("BRIGADEIRO 1/8", "VAMOS FAZER!", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
       }
     }
-    else {
-      char etapa[14];
-      snprintf(etapa, sizeof(etapa), "MEXER %d/3", mexidasBrigadeiro + 1);
-      telaBase("BRIGADEIRO 5/8", etapa, "SEM PARAR!", "OK = MEXER", GATO_ATENTO, false);
 
-      if (clicou(BOTAO_2)) {
-        mexidasBrigadeiro++;
+    else if (estadoBrigadeiro == BRI_BAIXO) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1800);
+      telaComBarra("BRIGADEIRO 4/8", "LIGUE FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1800);
+
+      if (pronto) {
+        estadoBrigadeiro = BRI_MEXER;
+        mexidasBrigadeiro = 0;
         brigadeiroPodeMexer = false;
         inicioFaixa = 0;
         bipDuplo();
+      }
+    }
 
-        if (mexidasBrigadeiro >= 3) {
-          mostrarMensagem("BRIGADEIRO", "3 MEXIDAS!", "CONTINUE", 500, GATO_ATENTO);
-          estadoBrigadeiro = BRI_ENGROSSAR;
+    else if (estadoBrigadeiro == BRI_MEXER) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+
+      if (!fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        brigadeiroPodeMexer = false;
+        inicioFaixa = 0;
+      }
+
+      if (!brigadeiroPodeMexer) {
+        bool estabilizou = manterFaixa(fogo, FOGO_BAIXO, 1100);
+
+        char etapa[14];
+        snprintf(etapa, sizeof(etapa), "MEXER %d/3", mexidasBrigadeiro + 1);
+
+        telaComBarra("BRIGADEIRO 5/8", etapa, "FOGO BAIXO", fb, gato, gota, inicioFaixa, 1100);
+
+        if (estabilizou) {
+          brigadeiroPodeMexer = true;
+          bip(45);
+        }
+      }
+      else {
+        char etapa[14];
+        snprintf(etapa, sizeof(etapa), "MEXER %d/3", mexidasBrigadeiro + 1);
+
+        telaBase("BRIGADEIRO 5/8", etapa, "SEM PARAR!", "OK = MEXER", GATO_ATENTO, false);
+
+        if (clicou(BOTAO_2)) {
+          mexidasBrigadeiro++;
+          brigadeiroPodeMexer = false;
+          inicioFaixa = 0;
+          bipDuplo();
+
+          if (mexidasBrigadeiro >= 3) {
+            estadoBrigadeiro = BRI_ENGROSSAR;
+          }
         }
       }
     }
-  }
 
-  else if (estadoBrigadeiro == BRI_ENGROSSAR) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_BAIXO, 3200);
-    telaComBarra("BRIGADEIRO 6/8", "ATE ENGROSSAR", "MEXA DEVAGAR", fb, gato, gota, inicioFaixa, 3200);
+    else if (estadoBrigadeiro == BRI_ENGROSSAR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 3200);
+      telaComBarra("BRIGADEIRO 6/8", "MEXA DEVAGAR", "ATE ENGROSSAR", fb, gato, gota, inicioFaixa, 3200);
 
-    if (pronto) {
-      estadoBrigadeiro = BRI_PONTO;
-      bipDuplo();
-    }
-  }
-
-  else if (estadoBrigadeiro == BRI_PONTO) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-
-    if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-      telaBase("BRIGADEIRO 7/8", "SOLTOU FUNDO?", "PONTO CERTO?", "OK = SIM", GATO_ATENTO, false);
-    }
-    else {
-      telaBase("BRIGADEIRO 7/8", "VEJA O PONTO", "FOGO BAIXO", fb, gato, gota);
-    }
-
-    if (clicou(BOTAO_2)) {
-      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-        estadoBrigadeiro = BRI_DESLIGAR;
-        inicioDesligado = 0;
+      if (pronto) {
+        estadoBrigadeiro = BRI_PONTO;
         bipDuplo();
       }
-      else bipTriplo();
     }
-  }
 
-  else if (estadoBrigadeiro == BRI_DESLIGAR) {
-    if (fogo.zona == FOGO_OFF) {
-      if (inicioDesligado == 0) inicioDesligado = millis();
-      telaBase("BRIGADEIRO 8/8", "PONTO CERTO!", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+    else if (estadoBrigadeiro == BRI_PONTO) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
 
-      if (millis() - inicioDesligado >= 700) {
-        mostrarMensagem("BRIGADEIRO", "DEIXE ESFRIAR", "PRONTINHO!", 650, GATO_ATENTO);
-        concluirReceita(1);
-        return;
+      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        telaBase("BRIGADEIRO 7/8", "SOLTOU FUNDO?", "PONTO CERTO?", "OK = SIM", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("BRIGADEIRO 7/8", "VEJA O PONTO", "FOGO BAIXO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+          estadoBrigadeiro = BRI_DESLIGAR;
+          inicioDesligado = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
       }
     }
-    else {
-      inicioDesligado = 0;
-      telaBase("BRIGADEIRO 8/8", "PONTO CERTO!", "DESLIGUE FOGO", "GIRE ATE 0", GATO_ATENTO, true);
+
+    else if (estadoBrigadeiro == BRI_DESLIGAR) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("BRIGADEIRO 8/8", "PONTO CERTO!", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+
+        if (millis() - inicioDesligado >= 700) {
+          mostrarMensagem("BRIGADEIRO", "DEIXE ESFRIAR", "PRONTINHO!", 650, GATO_ATENTO);
+          concluirReceita(1);
+          return;
+        }
+      }
+      else {
+        inicioDesligado = 0;
+        TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
+                     (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
+        telaBase("BRIGADEIRO 8/8", "PONTO CERTO!", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
+      }
     }
   }
 
@@ -1484,37 +1452,15 @@ void jogoBrigadeiro() {
   }
 }
 
-// RECEITA 3 - SOPA
-// PUZZLE: CONDICAO SE / SENAO -> 274196
 void jogoSopa() {
-  DadosFogo fogo = calcularFogo();
-  aplicarFogoAnimado(fogo);
-  atualizarAlarme(fogo.zona);
-
   const char* fb = "";
   TipoGato gato = GATO_ATENTO;
   bool gota = false;
 
-  if (estadoSopa == SOP_ZERO) {
-    if (fogo.zona == FOGO_OFF) {
-      if (inicioDesligado == 0) inicioDesligado = millis();
-      telaBase("SOPA 1/8", "VAMOS FAZER!", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
-
-      if (millis() - inicioDesligado >= 600) {
-        inicioDesligado = 0;
-        estadoSopa = SOP_PANELA;
-        bipDuplo();
-      }
-    }
-    else {
-      inicioDesligado = 0;
-      telaBase("SOPA 1/8", "VAMOS FAZER!", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
-    }
-  }
-
-  else if (estadoSopa == SOP_PANELA) {
+  if (estadoSopa == SOP_PANELA) {
     apagarFogo();
-    telaBase("SOPA 2/8", "PEGUE PANELA", "COLOQUE AQUI", "OK = PEGUEI", GATO_ATENTO, false);
+    buzzerOff();
+    telaBase("SOPA 2/8", "PEGUE PANELA", "DEIXE PRONTA", "OK = PEGUEI", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       estadoSopa = SOP_INGREDIENTES;
@@ -1524,6 +1470,7 @@ void jogoSopa() {
 
   else if (estadoSopa == SOP_INGREDIENTES) {
     apagarFogo();
+    buzzerOff();
     telaBase("SOPA 3/8", "ADD LEGUMES", "E AGUA", "OK = PRONTO", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
@@ -1533,106 +1480,135 @@ void jogoSopa() {
     }
   }
 
-  else if (estadoSopa == SOP_AQUECER) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, FOGO_MEDIO, 2400);
-    telaComBarra("SOPA 4/8", "AQUECA SOPA", "ALVO: MEDIO", fb, gato, gota, inicioFaixa, 2400);
+  else {
+    DadosFogo fogo = calcularFogo();
+    aplicarFogoAnimado(fogo);
+    atualizarAlarme(fogo.zona);
 
-    if (pronto) {
-      estadoSopa = SOP_MEXER;
-      bipDuplo();
-    }
-  }
+    if (estadoSopa == SOP_ZERO) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("SOPA 1/8", "VAMOS FAZER!", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
 
-  else if (estadoSopa == SOP_MEXER) {
-    feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
-
-    if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
-      telaBase("SOPA 5/8", "MEXA A SOPA", "DEVAGAR", "OK = MEXI", GATO_ATENTO, false);
-    }
-    else {
-      telaBase("SOPA 5/8", "MEXA A SOPA", "ALVO: MEDIO", fb, gato, gota);
-    }
-
-    if (clicou(BOTAO_2)) {
-      if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
-        estadoSopa = SOP_CENARIOS;
-        cenarioSopa = 0;
-        avisoSopaTocado = false;
-        inicioFaixa = 0;
-        bipDuplo();
+        if (millis() - inicioDesligado >= 600) {
+          inicioDesligado = 0;
+          estadoSopa = SOP_PANELA;
+          bipDuplo();
+        }
       }
-      else bipTriplo();
-    }
-  }
-
-  else if (estadoSopa == SOP_CENARIOS) {
-    bool fervendo = sopaFervendo[cenarioSopa];
-    ZonaFogo alvo = fervendo ? FOGO_BAIXO : FOGO_MEDIO;
-
-    if (fervendo && !avisoSopaTocado) {
-      bipTriplo();
-      avisoSopaTocado = true;
-    }
-
-    feedbackFogo(fogo, alvo, fb, gato, gota);
-    bool pronto = manterFaixa(fogo, alvo, 1800);
-
-    char etapa[14];
-    snprintf(etapa, sizeof(etapa), "CASO %d/4", cenarioSopa + 1);
-
-    if (fervendo) {
-      telaComBarra("SOPA 6/8", etapa, "FERVENTE!", fb, gato, gota, inicioFaixa, 1800);
-    }
-    else {
-      telaComBarra("SOPA 6/8", etapa, "COZINHE MEDIO", fb, gato, gota, inicioFaixa, 1800);
-    }
-
-    if (pronto) {
-      cenarioSopa++;
-      inicioFaixa = 0;
-      avisoSopaTocado = false;
-      bipDuplo();
-
-      if (cenarioSopa >= 4) {
-        estadoSopa = SOP_FINALIZAR;
-      }
-    }
-  }
-
-  else if (estadoSopa == SOP_FINALIZAR) {
-    feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-
-    if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-      telaBase("SOPA 7/8", "TEMPERE SOPA", "FOGO BAIXO", "OK = PRONTO", GATO_ATENTO, false);
-    }
-    else {
-      telaBase("SOPA 7/8", "FINALIZANDO", "ABAIXE FOGO", fb, gato, gota);
-    }
-
-    if (clicou(BOTAO_2)) {
-      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-        estadoSopa = SOP_DESLIGAR;
+      else {
         inicioDesligado = 0;
+        telaBase("SOPA 1/8", "VAMOS FAZER!", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
+      }
+    }
+
+    else if (estadoSopa == SOP_AQUECER) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 2400);
+      telaComBarra("SOPA 4/8", "AQUECA SOPA", "ALVO: MEDIO", fb, gato, gota, inicioFaixa, 2400);
+
+      if (pronto) {
+        estadoSopa = SOP_MEXER;
         bipDuplo();
       }
-      else bipTriplo();
     }
-  }
 
-  else if (estadoSopa == SOP_DESLIGAR) {
-    if (fogo.zona == FOGO_OFF) {
-      if (inicioDesligado == 0) inicioDesligado = millis();
-      telaBase("SOPA 8/8", "SOPA PRONTA!", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+    else if (estadoSopa == SOP_MEXER) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
 
-      if (millis() - inicioDesligado >= 700) {
-        concluirReceita(2);
-        return;
+      if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
+        telaBase("SOPA 5/8", "MEXA A SOPA", "DEVAGAR", "OK = MEXI", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("SOPA 5/8", "MEXA A SOPA", "ALVO: MEDIO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_MEDIO)) {
+          estadoSopa = SOP_CENARIOS;
+          cenarioSopa = 0;
+          avisoSopaTocado = false;
+          inicioFaixa = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
       }
     }
-    else {
-      inicioDesligado = 0;
-      telaBase("SOPA 8/8", "SOPA PRONTA!", "DESLIGUE FOGO", "GIRE ATE 0", GATO_ATENTO, true);
+
+    else if (estadoSopa == SOP_CENARIOS) {
+      bool fervendo = sopaFervendo[cenarioSopa];
+      ZonaFogo alvo = fervendo ? FOGO_BAIXO : FOGO_MEDIO;
+
+      if (fervendo && !avisoSopaTocado) {
+        bipTriplo();
+        avisoSopaTocado = true;
+      }
+
+      feedbackFogo(fogo, alvo, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, alvo, 1800);
+
+      char etapa[14];
+      snprintf(etapa, sizeof(etapa), "CASO %d/4", cenarioSopa + 1);
+
+      if (fervendo) {
+        telaComBarra("SOPA 6/8", etapa, "FERVEU DEMAIS", fb, gato, gota, inicioFaixa, 1800);
+      }
+      else {
+        telaComBarra("SOPA 6/8", etapa, "CONTINUE MED.", fb, gato, gota, inicioFaixa, 1800);
+      }
+
+      if (pronto) {
+        cenarioSopa++;
+        inicioFaixa = 0;
+        avisoSopaTocado = false;
+        bipDuplo();
+
+        if (cenarioSopa >= 4) {
+          estadoSopa = SOP_FINALIZAR;
+        }
+      }
+    }
+
+    else if (estadoSopa == SOP_FINALIZAR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        telaBase("SOPA 7/8", "TEMPERE SOPA", "PROVE O CALDO", "OK = PRONTO", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("SOPA 7/8", "FINALIZANDO", "ABAIXE FOGO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+          estadoSopa = SOP_DESLIGAR;
+          inicioDesligado = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
+      }
+    }
+
+    else if (estadoSopa == SOP_DESLIGAR) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("SOPA 8/8", "SOPA PRONTA!", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+
+        if (millis() - inicioDesligado >= 700) {
+          concluirReceita(2);
+          return;
+        }
+      }
+      else {
+        inicioDesligado = 0;
+        TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
+                     (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
+        telaBase("SOPA 8/8", "SOPA PRONTA!", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
+      }
     }
   }
 
@@ -1643,25 +1619,27 @@ void jogoSopa() {
   }
 }
 
-// RECEITA 4 - BOLO 
-// PUZZLE: QUANTIDADES / VARIAVEIS -> 4231
 void jogoBolo() {
-  apagarFogo();
-  buzzerOff();
+  const char* fb = "";
+  TipoGato gato = GATO_ATENTO;
+  bool gota = false;
 
   if (estadoBolo == BOL_PERGUNTAS) {
+    apagarFogo();
+    buzzerOff();
+
     int valor = map(analogRead(POT), 0, 4095, 0, 9);
     valor = constrain(valor, 0, 9);
 
     char linha3[14];
     snprintf(linha3, sizeof(linha3), "VALOR: %d OK", valor);
 
-    telaBase("BOLO 1/6", boloLinha1[perguntaBolo], boloLinha2[perguntaBolo], linha3, GATO_ATENTO, false);
+    telaBase("BOLO 1/10", boloLinha1[perguntaBolo], boloLinha2[perguntaBolo], linha3, GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       if (valor == boloResposta[perguntaBolo]) {
         bipDuplo();
-        mostrarMensagem("BOLO NUMEROS", "VALOR SALVO", "MEDIDA CERTA", 500, GATO_ATENTO);
+        mostrarMensagem("BOLO NUMEROS", "MEDIDA CERTA", "VALOR SALVO", 500, GATO_ATENTO);
         perguntaBolo++;
 
         if (perguntaBolo >= 4) {
@@ -1676,7 +1654,9 @@ void jogoBolo() {
   }
 
   else if (estadoBolo == BOL_JUNTAR) {
-    telaBase("BOLO 2/6", "JUNTE MEDIDAS", "NA TIGELA", "OK = JUNTEI", GATO_ATENTO, false);
+    apagarFogo();
+    buzzerOff();
+    telaBase("BOLO 2/10", "JUNTE MEDIDAS", "NA TIGELA", "OK = JUNTEI", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       estadoBolo = BOL_MISTURAR;
@@ -1685,7 +1665,9 @@ void jogoBolo() {
   }
 
   else if (estadoBolo == BOL_MISTURAR) {
-    telaBase("BOLO 3/6", "MISTURE MASSA", "ATE LISA", "OK = MISTUREI", GATO_ATENTO, false);
+    apagarFogo();
+    buzzerOff();
+    telaBase("BOLO 3/10", "MISTURE MASSA", "ATE FICAR LISA", "OK = PRONTO", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       estadoBolo = BOL_FORMA;
@@ -1694,48 +1676,147 @@ void jogoBolo() {
   }
 
   else if (estadoBolo == BOL_FORMA) {
-    telaBase("BOLO 4/6", "COLOQUE FORMA", "MASSA DENTRO", "OK = PRONTO", GATO_ATENTO, false);
+    apagarFogo();
+    buzzerOff();
+    telaBase("BOLO 4/10", "UNTE FRIGID.", "DEIXE PRONTA", "OK = PRONTO", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
-      estadoBolo = BOL_ASSAR;
-      inicioAcerto = millis();
+      estadoBolo = BOL_ZERO;
+      inicioDesligado = 0;
       bipDuplo();
     }
   }
 
-  else if (estadoBolo == BOL_ASSAR) {
-    if (inicioAcerto == 0) inicioAcerto = millis();
-    telaComBarra("BOLO 5/6", "ASSANDO...", "ESPERE...", "QUASE LA!", GATO_ATENTO, false, inicioAcerto, 4000);
+  else {
+    DadosFogo fogo = calcularFogo();
+    aplicarFogoAnimado(fogo);
+    atualizarAlarme(fogo.zona);
 
-    if (millis() - inicioAcerto >= 4000) {
-      inicioAcerto = 0;
-      estadoBolo = BOL_FINAL;
-      bipDuplo();
+    if (estadoBolo == BOL_ZERO) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("BOLO 5/10", "HORA DO FOGO", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
+
+        if (millis() - inicioDesligado >= 600) {
+          inicioDesligado = 0;
+          estadoBolo = BOL_PREAQUECER;
+          bipDuplo();
+        }
+      }
+      else {
+        inicioDesligado = 0;
+        telaBase("BOLO 5/10", "HORA DO FOGO", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
+      }
     }
-  }
 
-  else if (estadoBolo == BOL_FINAL) {
-    telaBase("BOLO 6/6", "BOLO PRONTO!", "RETIRE FORMA", "OK = RETIREI", GATO_ATENTO, false);
+    else if (estadoBolo == BOL_PREAQUECER) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 1800);
+      telaComBarra("BOLO 6/10", "PRE-AQUECA", "ALVO: MEDIO", fb, gato, gota, inicioFaixa, 1800);
 
-    if (clicou(BOTAO_2)) {
-      concluirReceita(3);
-      return;
+      if (pronto) {
+        estadoBolo = BOL_REDUZIR;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoBolo == BOL_REDUZIR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1300);
+      telaComBarra("BOLO 7/10", "AGORA ABAIXE", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1300);
+
+      if (pronto) {
+        estadoBolo = BOL_COLOCAR;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoBolo == BOL_COLOCAR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        telaBase("BOLO 8/10", "COLOQUE MASSA", "E TAMPE", "OK = PRONTO", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("BOLO 8/10", "COLOQUE MASSA", "FOGO BAIXO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+          estadoBolo = BOL_ASSAR;
+          inicioFaixa = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
+      }
+    }
+
+    else if (estadoBolo == BOL_ASSAR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 4500);
+      telaComBarra("BOLO 9/10", "DEIXE ASSAR", "FOGO BAIXO", fb, gato, gota, inicioFaixa, 4500);
+
+      if (pronto) {
+        estadoBolo = BOL_VERIFICAR;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoBolo == BOL_VERIFICAR) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        telaBase("BOLO 10/10", "CONFIRA BOLO", "ESTA FIRME?", "OK = SIM", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("BOLO 10/10", "CONFIRA BOLO", "FOGO BAIXO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+          estadoBolo = BOL_DESLIGAR;
+          inicioDesligado = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
+      }
+    }
+
+    else if (estadoBolo == BOL_DESLIGAR) {
+      if (fogo.zona == FOGO_OFF) {
+        if (inicioDesligado == 0) inicioDesligado = millis();
+        telaBase("BOLO NUMEROS", "BOLO PRONTO!", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+
+        if (millis() - inicioDesligado >= 700) {
+          concluirReceita(3);
+          return;
+        }
+      }
+      else {
+        inicioDesligado = 0;
+        TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
+                     (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
+        telaBase("BOLO NUMEROS", "BOLO PRONTO!", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
+      }
     }
   }
 
   if (clicou(BOTAO_1)) {
+    apagarFogo();
+    buzzerOff();
     estadoAtual = MENU_RECEITAS;
   }
 }
 
-// RECEITA 5 - OMELETE 
-// PUZZLE: RGB -> 121323
 void jogoOmelete() {
-  buzzerOff();
-
   if (estadoOmelete == OME_PREPARAR) {
+    buzzerOff();
     apagarFogo();
-    telaBase("OMELETE 1/9", "QUEBRE OVOS", "MISTURE BEM", "OK = PRONTO", GATO_ATENTO, false);
+    telaBase("OMELETE 1/11", "QUEBRE OVOS", "MISTURE BEM", "OK = PRONTO", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       estadoOmelete = OME_TEMPERO;
@@ -1745,7 +1826,8 @@ void jogoOmelete() {
 
   else if (estadoOmelete == OME_TEMPERO) {
     apagarFogo();
-    telaBase("OMELETE 2/9", "TEMPERE OVOS", "MISTURE MAIS", "OK = PRONTO", GATO_ATENTO, false);
+    buzzerOff();
+    telaBase("OMELETE 2/11", "TEMPERE OVOS", "MISTURE MAIS", "OK = PRONTO", GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       mostrarMensagem("OMELETE RGB", "ANTES DO FOGO", "VAMOS AS CORES", 600, GATO_ATENTO);
@@ -1755,6 +1837,7 @@ void jogoOmelete() {
   }
 
   else if (estadoOmelete == OME_CORES) {
+    buzzerOff();
     int canalSelecionado = map(analogRead(POT), 0, 4095, 0, 2);
     canalSelecionado = constrain(canalSelecionado, 0, 2);
 
@@ -1775,7 +1858,7 @@ void jogoOmelete() {
     const char* seletor = (canalSelecionado == 0) ? "SEL:R OK=TOG" :
                           (canalSelecionado == 1) ? "SEL:G OK=TOG" : "SEL:B OK=TOG";
 
-    telaBase("OMELETE 3/9", alvoCorNome[etapaCor], estado, seletor, GATO_ATENTO, false);
+    telaBase("OMELETE 3/11", alvoCorNome[etapaCor], estado, seletor, GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       if (canalSelecionado == 0) canalR = !canalR;
@@ -1797,7 +1880,6 @@ void jogoOmelete() {
       if (millis() - inicioAcerto >= 900) {
         bipDuplo();
         mostrarMensagem("OMELETE RGB", "COR CERTA!", alvoCorNome[etapaCor], 500, GATO_ATENTO);
-
         etapaCor++;
         inicioAcerto = 0;
 
@@ -1818,6 +1900,7 @@ void jogoOmelete() {
   }
 
   else if (estadoOmelete == OME_APAGAR) {
+    buzzerOff();
     int canalSelecionado = map(analogRead(POT), 0, 4095, 0, 2);
     canalSelecionado = constrain(canalSelecionado, 0, 2);
 
@@ -1829,7 +1912,7 @@ void jogoOmelete() {
     const char* seletor = (canalSelecionado == 0) ? "SEL:R OK=TOG" :
                           (canalSelecionado == 1) ? "SEL:G OK=TOG" : "SEL:B OK=TOG";
 
-    telaBase("OMELETE 4/9", "CORES CERTAS", "APAGUE TUDO", seletor, GATO_ATENTO, false);
+    telaBase("OMELETE 4/11", "CORES CERTAS", "APAGUE TUDO", seletor, GATO_ATENTO, false);
 
     if (clicou(BOTAO_2)) {
       if (canalSelecionado == 0) canalR = !canalR;
@@ -1840,13 +1923,16 @@ void jogoOmelete() {
     }
 
     bool tudoOff = !canalR && !canalG && !canalB;
+
     if (tudoOff) {
       if (inicioAcerto == 0) inicioAcerto = millis();
+
       if (millis() - inicioAcerto >= 700) {
         apagarFogo();
         inicioAcerto = 0;
+        inicioDesligado = 0;
         estadoOmelete = OME_ZERO_FOGO;
-        mostrarMensagem("OMELETE RGB", "CORES OK!", "AGORA COZINHE", 650, GATO_ATENTO);
+        mostrarMensagem("OMELETE RGB", "CORES OK!", "HORA DE COZIN.", 650, GATO_ATENTO);
         bipDuplo();
       }
     }
@@ -1867,7 +1953,7 @@ void jogoOmelete() {
     if (estadoOmelete == OME_ZERO_FOGO) {
       if (fogo.zona == FOGO_OFF) {
         if (inicioDesligado == 0) inicioDesligado = millis();
-        telaBase("OMELETE 5/9", "CONTROLE FOGO", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
+        telaBase("OMELETE 5/11", "HORA DO FOGO", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
 
         if (millis() - inicioDesligado >= 600) {
           inicioDesligado = 0;
@@ -1877,14 +1963,14 @@ void jogoOmelete() {
       }
       else {
         inicioDesligado = 0;
-        telaBase("OMELETE 5/9", "CONTROLE FOGO", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
+        telaBase("OMELETE 5/11", "HORA DO FOGO", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
       }
     }
 
     else if (estadoOmelete == OME_BAIXO) {
       feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1500);
-      telaComBarra("OMELETE 6/9", "LIGUE FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1500);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1400);
+      telaComBarra("OMELETE 6/11", "AQUECA FRIG.", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1400);
 
       if (pronto) {
         estadoOmelete = OME_COLOCAR;
@@ -1896,26 +1982,50 @@ void jogoOmelete() {
       feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
 
       if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-        telaBase("OMELETE 7/9", "COLOQUE OVOS", "NA FRIGIDEIRA", "OK = COLOQ.", GATO_ATENTO, false);
+        telaBase("OMELETE 7/11", "COLOQUE OVOS", "NA FRIGIDEIRA", "OK = COLOQ.", GATO_ATENTO, false);
       }
       else {
-        telaBase("OMELETE 7/9", "COLOQUE OVOS", "FOGO BAIXO", fb, gato, gota);
+        telaBase("OMELETE 7/11", "COLOQUE OVOS", "FOGO BAIXO", fb, gato, gota);
       }
 
       if (clicou(BOTAO_2)) {
         if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-          estadoOmelete = OME_COZINHAR;
+          estadoOmelete = OME_SUBIR_MEDIO;
           inicioFaixa = 0;
           bipDuplo();
         }
-        else bipTriplo();
+        else {
+          bipTriplo();
+        }
+      }
+    }
+
+    else if (estadoOmelete == OME_SUBIR_MEDIO) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 1300);
+      telaComBarra("OMELETE 8/11", "AGORA AUMENTE", "ALVO: MEDIO", fb, gato, gota, inicioFaixa, 1300);
+
+      if (pronto) {
+        estadoOmelete = OME_COZINHAR;
+        bipDuplo();
       }
     }
 
     else if (estadoOmelete == OME_COZINHAR) {
+      feedbackFogo(fogo, FOGO_MEDIO, fb, gato, gota);
+      bool pronto = manterFaixa(fogo, FOGO_MEDIO, 2800);
+      telaComBarra("OMELETE 9/11", "COZINHE OVOS", "FOGO MEDIO", fb, gato, gota, inicioFaixa, 2800);
+
+      if (pronto) {
+        estadoOmelete = OME_REDUZIR;
+        bipDuplo();
+      }
+    }
+
+    else if (estadoOmelete == OME_REDUZIR) {
       feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
-      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 3000);
-      telaComBarra("OMELETE 8/9", "COZINHANDO", "FOGO BAIXO", fb, gato, gota, inicioFaixa, 3000);
+      bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1200);
+      telaComBarra("OMELETE 10/11", "QUASE PRONTO", "ABAIXE FOGO", fb, gato, gota, inicioFaixa, 1200);
 
       if (pronto) {
         estadoOmelete = OME_DOBRAR;
@@ -1927,10 +2037,10 @@ void jogoOmelete() {
       feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
 
       if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
-        telaBase("OMELETE 9/9", "DOBRE OMELETE", "COM CUIDADO", "OK = DOBREI", GATO_ATENTO, false);
+        telaBase("OMELETE 11/11", "DOBRE OMELETE", "COM CUIDADO", "OK = DOBREI", GATO_ATENTO, false);
       }
       else {
-        telaBase("OMELETE 9/9", "DOBRE OMELETE", "FOGO BAIXO", fb, gato, gota);
+        telaBase("OMELETE 11/11", "DOBRE OMELETE", "FOGO BAIXO", fb, gato, gota);
       }
 
       if (clicou(BOTAO_2)) {
@@ -1939,7 +2049,9 @@ void jogoOmelete() {
           inicioDesligado = 0;
           bipDuplo();
         }
-        else bipTriplo();
+        else {
+          bipTriplo();
+        }
       }
     }
 
@@ -1955,7 +2067,9 @@ void jogoOmelete() {
       }
       else {
         inicioDesligado = 0;
-        telaBase("OMELETE RGB", "OMELETE OK!", "DESLIGUE FOGO", "GIRE ATE 0", GATO_ATENTO, true);
+        TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
+                     (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
+        telaBase("OMELETE RGB", "OMELETE OK!", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
       }
     }
   }
@@ -1967,8 +2081,6 @@ void jogoOmelete() {
   }
 }
 
-// RECEITA 6 - MINGAU 
-// PUZZLE: DEPURACAO -> 51827
 void jogoMingau() {
   if (estadoMingau == MIN_DEBUG) {
     apagarFogo();
@@ -2025,7 +2137,7 @@ void jogoMingau() {
     if (estadoMingau == MIN_ZERO) {
       if (fogo.zona == FOGO_OFF) {
         if (inicioDesligado == 0) inicioDesligado = millis();
-        telaBase("MINGAU 1/6", "RECEITA CERTA", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
+        telaBase("MINGAU 1/7", "RECEITA CERTA", "COMECE EM 0", "TUDO PRONTO", GATO_ATENTO, false);
 
         if (millis() - inicioDesligado >= 600) {
           inicioDesligado = 0;
@@ -2035,13 +2147,14 @@ void jogoMingau() {
       }
       else {
         inicioDesligado = 0;
-        telaBase("MINGAU 1/6", "RECEITA CERTA", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
+        telaBase("MINGAU 1/7", "RECEITA CERTA", "COMECE EM 0", "GIRE ATE 0", GATO_ATENTO, true);
       }
     }
 
     else if (estadoMingau == MIN_INGREDIENTES) {
       apagarFogo();
-      telaBase("MINGAU 2/6", "LEITE+AVEIA", "ADD ACUCAR", "OK = PRONTO", GATO_ATENTO, false);
+      buzzerOff();
+      telaBase("MINGAU 2/7", "LEITE+AVEIA", "ADD ACUCAR", "OK = PRONTO", GATO_ATENTO, false);
 
       if (clicou(BOTAO_2)) {
         estadoMingau = MIN_BAIXO;
@@ -2052,7 +2165,7 @@ void jogoMingau() {
     else if (estadoMingau == MIN_BAIXO) {
       feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
       bool pronto = manterFaixa(fogo, FOGO_BAIXO, 1800);
-      telaComBarra("MINGAU 3/6", "COZINHE", "FOGO BAIXO", fb, gato, gota, inicioFaixa, 1800);
+      telaComBarra("MINGAU 3/7", "LIGUE FOGO", "ALVO: BAIXO", fb, gato, gota, inicioFaixa, 1800);
 
       if (pronto) {
         estadoMingau = MIN_MEXER;
@@ -2073,9 +2186,11 @@ void jogoMingau() {
 
       if (!mingauPodeMexer) {
         bool estabilizou = manterFaixa(fogo, FOGO_BAIXO, 900);
+
         char etapa[14];
         snprintf(etapa, sizeof(etapa), "MEXER %d/3", mexidasMingau + 1);
-        telaComBarra("MINGAU 4/6", etapa, "FOGO BAIXO", fb, gato, gota, inicioFaixa, 900);
+
+        telaComBarra("MINGAU 4/7", etapa, "FOGO BAIXO", fb, gato, gota, inicioFaixa, 900);
 
         if (estabilizou) {
           mingauPodeMexer = true;
@@ -2085,7 +2200,8 @@ void jogoMingau() {
       else {
         char etapa[14];
         snprintf(etapa, sizeof(etapa), "MEXER %d/3", mexidasMingau + 1);
-        telaBase("MINGAU 4/6", etapa, "SEM PARAR!", "OK = MEXER", GATO_ATENTO, false);
+
+        telaBase("MINGAU 4/7", etapa, "SEM PARAR!", "OK = MEXER", GATO_ATENTO, false);
 
         if (clicou(BOTAO_2)) {
           mexidasMingau++;
@@ -2103,19 +2219,40 @@ void jogoMingau() {
     else if (estadoMingau == MIN_ENGROSSAR) {
       feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
       bool pronto = manterFaixa(fogo, FOGO_BAIXO, 3000);
-      telaComBarra("MINGAU 5/6", "ATE ENGROSSAR", "FOGO BAIXO", fb, gato, gota, inicioFaixa, 3000);
+      telaComBarra("MINGAU 5/7", "ATE ENGROSSAR", "FOGO BAIXO", fb, gato, gota, inicioFaixa, 3000);
 
       if (pronto) {
-        estadoMingau = MIN_DESLIGAR;
-        inicioDesligado = 0;
+        estadoMingau = MIN_PONTO;
         bipDuplo();
+      }
+    }
+
+    else if (estadoMingau == MIN_PONTO) {
+      feedbackFogo(fogo, FOGO_BAIXO, fb, gato, gota);
+
+      if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+        telaBase("MINGAU 6/7", "CONFIRA PONTO", "CREMOSO?", "OK = SIM", GATO_ATENTO, false);
+      }
+      else {
+        telaBase("MINGAU 6/7", "CONFIRA PONTO", "FOGO BAIXO", fb, gato, gota);
+      }
+
+      if (clicou(BOTAO_2)) {
+        if (fogoNaFaixa(fogo, FOGO_BAIXO)) {
+          estadoMingau = MIN_DESLIGAR;
+          inicioDesligado = 0;
+          bipDuplo();
+        }
+        else {
+          bipTriplo();
+        }
       }
     }
 
     else if (estadoMingau == MIN_DESLIGAR) {
       if (fogo.zona == FOGO_OFF) {
         if (inicioDesligado == 0) inicioDesligado = millis();
-        telaBase("MINGAU 6/6", "MINGAU PRONTO", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
+        telaBase("MINGAU 7/7", "MINGAU PRONTO", "FOGO DESLIG.", "ISSO!", GATO_ATENTO, false);
 
         if (millis() - inicioDesligado >= 700) {
           estadoMingau = MIN_ESFRIAR;
@@ -2125,7 +2262,9 @@ void jogoMingau() {
       }
       else {
         inicioDesligado = 0;
-        telaBase("MINGAU 6/6", "MINGAU PRONTO", "DESLIGUE FOGO", "GIRE ATE 0", GATO_ATENTO, true);
+        TipoGato g = (fogo.zona >= FOGO_MUITO_ALTO) ? GATO_MEGA :
+                     (fogo.zona >= FOGO_ALTO) ? GATO_ASSUSTADO : GATO_ATENTO;
+        telaBase("MINGAU 7/7", "MINGAU PRONTO", "DESLIGUE FOGO", "GIRE ATE 0", g, fogo.zona >= FOGO_ALTO);
       }
     }
 
@@ -2148,7 +2287,6 @@ void jogoMingau() {
   }
 }
 
-// ROTEADOR DAS RECEITAS
 void atualizarReceitaAtual() {
   if (faseReceita == RECEITA_RECAP) {
     atualizarRecapReceita();
@@ -2165,8 +2303,6 @@ void atualizarReceitaAtual() {
   }
 }
 
-// MODO LIVRE
-// So e liberado apos concluir as 6 receitas.
 void atualizarModoLivre() {
   if (!todasReceitasConcluidas()) {
     apagarFogo();
@@ -2222,8 +2358,6 @@ void atualizarModoLivre() {
   }
 }
 
-// RESET DE PROGRESSO
-// Segure BOTAO 1 + BOTAO 3 por 2 s ao ligar.
 void verificarResetProgresso() {
   if (digitalRead(BOTAO_1) == LOW && digitalRead(BOTAO_3) == LOW) {
     unsigned long inicio = millis();
@@ -2246,7 +2380,6 @@ void verificarResetProgresso() {
   }
 }
 
-// SETUP
 void setup() {
   Serial.begin(57600);
 
@@ -2275,7 +2408,6 @@ void setup() {
     while (true) delay(100);
   }
 
-  // impede quebra automatica de linha e sobreposicoes
   display.setTextWrap(false);
   display.clearDisplay();
   display.display();
@@ -2285,7 +2417,7 @@ void setup() {
 
   estadoAtual = MENU_PRINCIPAL;
 }
-// LOOP PRINCIPAL
+
 void loop() {
   switch (estadoAtual) {
     case MENU_PRINCIPAL:
