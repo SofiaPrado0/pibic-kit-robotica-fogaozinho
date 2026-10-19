@@ -4,20 +4,9 @@
 #include <Adafruit_SSD1306.h>
 #include <Preferences.h>
 
-// =====================================================
-// FOGAOZINHO EDUCACIONAL - PIBIC/PIBIT
-// Firmware v1.2 - 6 receitas completas + receita jogavel passo a passo
-//
-// REGRA DE OURO:
-// O livrinho revela o codigo.
-// O fogao transforma o codigo em experiencia fisica.
-// Agora cada minigame acompanha uma RECEITA completa: preparar, cozinhar,
-// ajustar o fogo, executar acoes e finalizar.
-// =====================================================
+// FOGAOZINHO EDUCACIONAL - PIBIC
 
-// =====================================================
 // OLED
-// =====================================================
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 #define OLED_RESET -1
@@ -25,9 +14,7 @@
 
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
-// =====================================================
-// PINAGEM FINAL
-// =====================================================
+// PINAGEM 
 #define LED_R 18
 #define LED_B 19
 #define LED_G 23
@@ -40,9 +27,7 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 
 #define BUZZER 14    // modulo low-level trigger
 
-// =====================================================
-// TIPOS - SEMPRE ANTES DAS FUNCOES
-// =====================================================
+// TIPOS 
 enum TipoGato : uint8_t {
   GATO_DORMINDO,
   GATO_ATENTO,
@@ -150,10 +135,6 @@ enum EstadoMingau : uint8_t {
   MIN_ESFRIAR
 };
 
-// =====================================================
-// PROTOTIPOS EXPLICITOS
-// Evita problemas do preprocessador do Arduino.
-// =====================================================
 void buzzerOff();
 void buzzerOn();
 void bip(int tempo);
@@ -208,10 +189,7 @@ void jogoBolo();
 void jogoOmelete();
 void jogoMingau();
 
-// =====================================================
 // SPRITES - SSD1306 VERTICAL PAGES / LSB = TOPO
-// =====================================================
-
 // GATO DORMINDO - 37 x 29
 const int gatoDormindo_width = 37;
 const int gatoDormindo_height = 29;
@@ -275,11 +253,7 @@ const unsigned char gatoMega[] PROGMEM = {
 0x00,0x00,0x00,0x00
 };
 
-// =====================================================
-// DADOS DAS 6 RECEITAS - EXTRAIDOS DO ROTEIRO
-// =====================================================
-const int TOTAL_RECEITAS = 6;
-
+// RECEITAS
 const char* NOMES_RECEITAS[TOTAL_RECEITAS] = {
   "PANQUECA",
   "BRIGADEIRO",
@@ -306,9 +280,7 @@ bool receitaConcluida[TOTAL_RECEITAS] = {
   false, false, false, false, false, false
 };
 
-// =====================================================
 // ESTADO GERAL
-// =====================================================
 Preferences prefs;
 
 EstadoSistema estadoAtual = MENU_PRINCIPAL;
@@ -319,9 +291,7 @@ int receitaEmJogo = 0;
 
 String codigoDigitado = "";
 
-// =====================================================
 // TEMPORIZADORES GERAIS
-// =====================================================
 unsigned long inicioFaixa = 0;
 unsigned long inicioDesligado = 0;
 unsigned long ultimoAviso = 0;
@@ -330,15 +300,12 @@ unsigned long inicioAcerto = 0;
 
 bool alarmeLigado = false;
 
-// =====================================================
 // CHAMA
-// =====================================================
 unsigned long ultimaVariacaoChama = 0;
 int brilhoChama = 100;
 
-// =====================================================
+
 // RECAP DA RECEITA + ESTADOS DOS MINIGAMES
-// =====================================================
 FaseReceita faseReceita = RECEITA_RECAP;
 int passoRecap = 0;
 
@@ -380,7 +347,7 @@ int cenarioSopa = 0;
 const bool sopaFervendo[4] = { false, true, false, true };
 bool avisoSopaTocado = false;
 
-// Bolo - desafios NOVOS, depois de recuperar 4231.
+// Bolo 
 int perguntaBolo = 0;
 const char* boloLinha1[4] = {
   "A=3  B=4",
@@ -396,7 +363,7 @@ const char* boloLinha2[4] = {
 };
 const int boloResposta[4] = { 7, 4, 5, 3 };
 
-// Omelete RGB
+// Omelete
 int etapaCor = 0;
 bool canalR = false;
 bool canalG = false;
@@ -407,7 +374,7 @@ const char* alvoCorNome[3] = {
   "CIANO"
 };
 
-// Mingau - novo teste de depuracao + execucao corrigida.
+// Mingau 
 int passoDebug = 0;
 const int TOTAL_DEBUG = 6;
 const char* debugComando[TOTAL_DEBUG] = {
@@ -429,9 +396,7 @@ const bool debugEhBug[TOTAL_DEBUG] = {
 int mexidasMingau = 0;
 bool mingauPodeMexer = false;
 
-// =====================================================
 // BUZZER
-// =====================================================
 void buzzerOff() {
   digitalWrite(BUZZER, HIGH);
 }
@@ -468,9 +433,7 @@ void somVitoria() {
   bip(130);
 }
 
-// =====================================================
 // RGB
-// =====================================================
 void corRGB(int r, int g, int b) {
   analogWrite(LED_R, constrain(r, 0, 255));
   analogWrite(LED_G, constrain(g, 0, 255));
@@ -481,9 +444,7 @@ void apagarFogo() {
   corRGB(0, 0, 0);
 }
 
-// =====================================================
-// FOGO - CORES CALIBRADAS NO PROTOTIPO
-// =====================================================
+// FOGO 
 DadosFogo calcularFogo() {
   DadosFogo fogo;
 
@@ -588,9 +549,7 @@ void atualizarAlarme(ZonaFogo zona) {
   }
 }
 
-// =====================================================
 // BOTOES
-// =====================================================
 bool clicou(int pino) {
   if (digitalRead(pino) == LOW) {
     delay(25);
@@ -604,9 +563,7 @@ bool clicou(int pino) {
   return false;
 }
 
-// =====================================================
 // SPRITES
-// =====================================================
 void desenharBitmapVertical(int x0, int y0, const unsigned char* bitmap, int largura, int altura) {
   int paginas = (altura + 7) / 8;
 
@@ -659,11 +616,9 @@ void desenharGato(TipoGato tipo, bool gota) {
   }
 }
 
-// =====================================================
 // UI - GRADE FIXA
 // Texto: x 3..80
 // Gato:  x 84..127
-// =====================================================
 void printLimitado(const char* texto, int maxChars) {
   if (texto == nullptr) return;
   for (int i = 0; texto[i] != '\0' && i < maxChars; i++) {
@@ -737,9 +692,7 @@ void telaAbertura() {
   delay(1400);
 }
 
-// =====================================================
 // FEEDBACK DE FOGO
-// =====================================================
 bool fogoNaFaixa(DadosFogo fogo, ZonaFogo alvo) {
   if (alvo == FOGO_MEDIO) {
     return fogo.potencia >= 105 && fogo.potencia <= 155;
@@ -810,9 +763,7 @@ bool manterFaixa(DadosFogo fogo, ZonaFogo alvo, unsigned long tempoNecessario) {
   return false;
 }
 
-// =====================================================
 // MEMORIA NVS
-// =====================================================
 void carregarProgresso() {
   for (int i = 0; i < TOTAL_RECEITAS; i++) {
     char chaveU[5];
@@ -863,9 +814,7 @@ bool todasReceitasConcluidas() {
   return true;
 }
 
-// =====================================================
 // MENUS
-// =====================================================
 void atualizarMenuPrincipal() {
   apagarFogo();
   buzzerOff();
@@ -973,9 +922,7 @@ void atualizarMenuReceitas() {
   }
 }
 
-// =====================================================
 // ENTRADA DE CODIGO - 4 A 6 DIGITOS
-// =====================================================
 void atualizarTelaCodigo() {
   apagarFogo();
   buzzerOff();
@@ -1047,9 +994,7 @@ void atualizarTelaCodigo() {
   }
 }
 
-// =====================================================
 // INICIO / RECAP / FIM DAS RECEITAS
-// =====================================================
 void iniciarReceita(int receita) {
   receitaEmJogo = receita;
   faseReceita = RECEITA_RECAP;
@@ -1195,11 +1140,8 @@ void concluirReceita(int receita) {
   estadoAtual = MENU_RECEITAS;
 }
 
-// =====================================================
 // RECEITA 1 - PANQUECA
 // PUZZLE: SEQUENCIA / ALGORITMO -> 92846
-// JOGO: A RECEITA ACONTECE PASSO A PASSO + CONTROLE DE CHAMA
-// =====================================================
 void jogoPanqueca() {
   DadosFogo fogo = calcularFogo();
   aplicarFogoAnimado(fogo);
@@ -1386,11 +1328,8 @@ void jogoPanqueca() {
   }
 }
 
-// =====================================================
 // RECEITA 2 - BRIGADEIRO
 // PUZZLE: REPETICAO / LOOP -> 317056
-// JOGO: RECEITA COMPLETA + FOGO BAIXO + REPETIR MEXIDAS
-// =====================================================
 void jogoBrigadeiro() {
   DadosFogo fogo = calcularFogo();
   aplicarFogoAnimado(fogo);
@@ -1545,11 +1484,8 @@ void jogoBrigadeiro() {
   }
 }
 
-// =====================================================
 // RECEITA 3 - SOPA
 // PUZZLE: CONDICAO SE / SENAO -> 274196
-// JOGO: PREPARAR SOPA + REAGIR A SITUACOES DE FERVURA
-// =====================================================
 void jogoSopa() {
   DadosFogo fogo = calcularFogo();
   aplicarFogoAnimado(fogo);
@@ -1707,11 +1643,8 @@ void jogoSopa() {
   }
 }
 
-// =====================================================
-// RECEITA 4 - BOLO DOS NUMEROS
+// RECEITA 4 - BOLO 
 // PUZZLE: QUANTIDADES / VARIAVEIS -> 4231
-// JOGO: RESOLVER VALORES + PREPARAR A RECEITA PASSO A PASSO
-// =====================================================
 void jogoBolo() {
   apagarFogo();
   buzzerOff();
@@ -1795,11 +1728,8 @@ void jogoBolo() {
   }
 }
 
-// =====================================================
-// RECEITA 5 - OMELETE COLORIDO
+// RECEITA 5 - OMELETE 
 // PUZZLE: RGB -> 121323
-// JOGO: PREPARAR OMELETE + DESAFIO RGB + COZINHAR DE VERDADE NO JOGO
-// =====================================================
 void jogoOmelete() {
   buzzerOff();
 
@@ -2037,11 +1967,8 @@ void jogoOmelete() {
   }
 }
 
-// =====================================================
-// RECEITA 6 - MINGAU DO BUG
+// RECEITA 6 - MINGAU 
 // PUZZLE: DEPURACAO -> 51827
-// JOGO: DEPURAR + EXECUTAR A RECEITA CORRIGIDA PASSO A PASSO
-// =====================================================
 void jogoMingau() {
   if (estadoMingau == MIN_DEBUG) {
     apagarFogo();
@@ -2221,9 +2148,7 @@ void jogoMingau() {
   }
 }
 
-// =====================================================
 // ROTEADOR DAS RECEITAS
-// =====================================================
 void atualizarReceitaAtual() {
   if (faseReceita == RECEITA_RECAP) {
     atualizarRecapReceita();
@@ -2240,10 +2165,8 @@ void atualizarReceitaAtual() {
   }
 }
 
-// =====================================================
 // MODO LIVRE
 // So e liberado apos concluir as 6 receitas.
-// =====================================================
 void atualizarModoLivre() {
   if (!todasReceitasConcluidas()) {
     apagarFogo();
@@ -2299,10 +2222,8 @@ void atualizarModoLivre() {
   }
 }
 
-// =====================================================
 // RESET DE PROGRESSO
 // Segure BOTAO 1 + BOTAO 3 por 2 s ao ligar.
-// =====================================================
 void verificarResetProgresso() {
   if (digitalRead(BOTAO_1) == LOW && digitalRead(BOTAO_3) == LOW) {
     unsigned long inicio = millis();
@@ -2325,9 +2246,7 @@ void verificarResetProgresso() {
   }
 }
 
-// =====================================================
 // SETUP
-// =====================================================
 void setup() {
   Serial.begin(57600);
 
@@ -2366,10 +2285,7 @@ void setup() {
 
   estadoAtual = MENU_PRINCIPAL;
 }
-
-// =====================================================
 // LOOP PRINCIPAL
-// =====================================================
 void loop() {
   switch (estadoAtual) {
     case MENU_PRINCIPAL:
